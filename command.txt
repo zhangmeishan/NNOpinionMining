@@ -1,0 +1,4 @@
+cmake .. -DEIGEN3_DIR=/d/eigen/ -DN3L_DIR=/d/N3LDG
+
+-l -train D:\experiments\IJCAI2017\OpinionMining\experiment-debug\my_data_0\train_0.txt -dev D:\experiments\IJCAI2017\OpinionMining\experiment-debug\my_data_0\dev_0.txt -test D:\experiments\IJCAI2017\OpinionMining\experiment-debug\my_data_0\test_0.txt -option D:\experiments\IJCAI2017\OpinionMining\experiment-debug\option.debug -mem 0
+-l -train D:\experiments\IJCAI2017\OpinionMining\experiment-debug\my_data_0\train_0.txt -dev D:\experiments\IJCAI2017\OpinionMining\experiment-debug\my_data_0\train_0.txt -test D:\experiments\IJCAI2017\OpinionMining\experiment-debug\my_data_0\test_0.txt -option D:\experiments\IJCAI2017\OpinionMining\experiment-debug\option.debug -mem 0

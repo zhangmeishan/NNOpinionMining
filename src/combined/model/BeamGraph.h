@@ -7,9 +7,8 @@
 // Each model consists of two parts, building neural graph and defining output losses.
 // This framework wastes memory
 class BeamGraphBuilder {
-
   public:
-    GlobalNodes globalNodes;
+    //GlobalNodes globalNodes;
     // node instances
     CStateItem start;
     vector<vector<CStateItem> > states;
@@ -34,10 +33,8 @@ class BeamGraphBuilder {
     inline void initial(ModelParams& model, HyperParams& opts) {
         std::cout << "state size: " << sizeof(CStateItem) << std::endl;
         std::cout << "action node size: " << sizeof(ActionedNodes) << std::endl;
-        globalNodes.resize(max_token_size, max_word_length, opts.lstm_layer);
-        states.resize(opts.maxlength + 1);
 
-        globalNodes.initial(model, opts);
+        states.resize(opts.maxlength + 1);
         for (int idx = 0; idx < states.size(); idx++) {
             states[idx].resize(opts.beam);
             for (int idy = 0; idy < states[idx].size(); idy++) {
@@ -59,14 +56,10 @@ class BeamGraphBuilder {
         pOpts = NULL;
     }
 
-  public:
-    inline void encode(Graph* pcg, Instance& inst) {
-        globalNodes.forward(pcg, inst, pOpts);
-    }
 
   public:
     // some nodes may behave different during training and decode, for example, dropout
-    inline void decode(Graph* pcg, Instance& inst, bool nerOnly, const vector<CAction>* goldAC = NULL) {
+    inline void decode(Graph* pcg, GlobalNodes* encoder, Instance& inst, bool nerOnly, const vector<CAction>* goldAC = NULL) {
         //first step, clear node values
         clearVec(outputs);
 
@@ -101,7 +94,7 @@ class BeamGraphBuilder {
             for (int idx = 0; idx < lastStates.size(); idx++) {
                 pGenerator = lastStates[idx];
                 if (pcg->train && pGenerator->_bGold) pGoldGenerator = pGenerator;
-                pGenerator->prepare(pOpts, pModel, &globalNodes);
+                pGenerator->prepare(pOpts, pModel, encoder);
             }
 
             if (pcg->train && pGoldGenerator == NULL) {
@@ -133,8 +126,10 @@ class BeamGraphBuilder {
             for (int idx = 0; idx < lastStates.size(); idx++) {
                 pGenerator = lastStates[idx];
                 scored_action.item = pGenerator;
+                output.curState = pGenerator;
                 for (int idy = 0; idy < actions[idx].size(); ++idy) {
                     scored_action.ac.set(actions[idx][idy]); //TODO:
+                    output.ac.set(actions[idx][idy]); //TODO:
                     if (pGenerator->_bGold && actions[idx][idy] == answer) {
                         scored_action.bGold = true;
                         correct_action_scored = true;

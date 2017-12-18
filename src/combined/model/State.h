@@ -474,11 +474,9 @@ class CStateItem {
                     actions.push_back(ac);
                 }
 
-                if (bTrain) {
-                    ac.set(CAction::REL, 0);
-                    actions.push_back(ac);
-                } else if (next_head_index == _head_size - 1 && _headed_entities[next_entity_index] == 0) {
+                if (next_head_index == _head_size - 1 && _headed_entities[next_entity_index] == 0) {
                     //std::cout << "last dse" << std::endl;
+                    //be sure that each agent/target has one dse
                 } else {
                     ac.set(CAction::REL, 0);
                     actions.push_back(ac);
@@ -610,6 +608,61 @@ class CStateItem {
         }
     }
 
+    //only support last step before finished
+    inline dtype rewardByAction(Instance& inst, const CAction& ac, HyperParams &opts, bool nerOnly) {
+        CResult output;
+        if (ac.isNER()) {
+            short next_j = _current_j + 1;
+            short temp = _labels[next_j][next_j];
+            _labels[next_j][next_j] = ac._label;
+            getResults(output, opts);
+            _labels[next_j][next_j] = temp;
+            int new_head_size = _head_size;
+            if (ac._label == 11 || ac._label == 12) new_head_size++;
+            if (_entity_size > 0 && new_head_size == 0) {
+                return 0;
+            }
+        } else if (ac.isREL()) {
+            short next_i, next_j;
+            short next_entity_index, next_head_index;
+            next_entity_index = _current_entity_index;
+            next_head_index = _current_head_index;
+            if (_current_head_index == _head_size - 1) {
+                next_entity_index = _current_entity_index + 1;
+                next_head_index = 0;
+            } else {
+                next_head_index = _current_head_index + 1;
+            }
+
+            short temp_i = _entities[next_entity_index];
+            short temp_j = _heads[next_head_index];
+
+            next_j = temp_j > temp_i ? temp_j : temp_i;
+            next_i = temp_j > temp_i ? temp_i : temp_j;
+
+            short temp = _labels[next_i][next_j];
+            _labels[next_i][next_j] = ac._label;
+            getResults(output, opts);
+            _labels[next_i][next_j] = temp;
+
+        } else {
+            if (!_bEnd) {
+                std::cout << "error to compute the reward value" << std::endl;
+            }
+            if (_entity_size > 0 && _head_size == 0) {
+                return 0;
+            }
+            getResults(output, opts);
+        }
+
+        Metric ner, rel;
+        inst.evaluate(output, ner, rel);
+
+        dtype reward = nerOnly ? ner.getAccuracy() : ner.getAccuracy() * rel.getAccuracy();
+
+        return reward;
+    }
+
 };
 
 class CScoredState {
@@ -662,15 +715,15 @@ class CScoredState_Compare {
 
 struct COutput {
     PNode in;
-    short nGLabel;
-    short nPLabel;
-    short nCLabel;
+    CStateItem *curState;
+    CAction ac;
+    dtype reward;
     bool bGold;
 
-    COutput() : in(NULL), nGLabel(0), nPLabel(0), nCLabel(0), bGold(false) {
+    COutput() : in(NULL), curState(NULL), ac(), reward(0), bGold(false) {
     }
 
-    COutput(const COutput &other) : in(other.in), nGLabel(other.nGLabel), nPLabel(other.nPLabel), nCLabel(other.nCLabel), bGold(other.bGold) {
+    COutput(const COutput &other) : in(other.in), curState(other.curState), ac(other.ac), reward(other.reward), bGold(other.bGold) {
     }
 };
 

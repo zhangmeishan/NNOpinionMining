@@ -265,21 +265,18 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
     decays[50] = true;
     decays[75] = true; */
     int maxNERIter = m_options.maxNERIter;
-    int startBeam = m_options.startBeam;
-    m_driver.setGraph(false);
+	int startBeam = m_options.startBeam > 0 ? m_options.startBeam : 1;
+    m_driver.setTao(1.0);
     m_driver.setClip(m_options.clip);
     for (int iter = 0; iter < maxIter; ++iter) {
         //if (decays[iter]) {
 		dtype adaAlpha = m_options.adaAlpha / (1 + m_options.decay * iter);
         m_driver.setUpdateParameters(m_options.regParameter, adaAlpha, m_options.adaEps);
-		std::cout << "\nadaAlpha = " << m_driver ._ada._alpha << std::endl;
-        //}
-        if (startBeam >= 0 && iter >= startBeam) {
-            m_driver.setGraph(true);
-        }
-
+		dtype tao = 1.0 - 1.0 * iter / startBeam;
+		if (iter >= startBeam) tao = 0;
+		m_driver.setTao(tao);					
 		if(m_options.reach_drop > 0)m_driver.setDropFactor(iter * 1.0 / m_options.reach_drop);
-
+		std::cout << "\nadaAlpha = " << m_driver._ada._alpha << ", tao = " << m_driver._tao << ", drop = " << m_driver._cg.drop_factor * m_driver._hyperparams.dropProb << std::endl;
         std::cout << "##### Iteration " << iter << std::endl;
         srand(iter);
         bool bEvaluate = false;
