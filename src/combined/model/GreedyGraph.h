@@ -8,6 +8,7 @@
 // This framework wastes memory
 class GreedyGraphBuilder {
   public:
+    GlobalNodes globalNodes;
     // node instances
     CStateItem start;
     vector<CStateItem> states;
@@ -32,8 +33,10 @@ class GreedyGraphBuilder {
     inline void initial(ModelParams &model, HyperParams &opts) {
         std::cout << "state size: " << sizeof(CStateItem) << std::endl;
         std::cout << "action node size: " << sizeof(ActionedNodes) << std::endl;
+        globalNodes.resize(max_token_size, max_word_length, opts.lstm_layer);
         states.resize(opts.maxlength + 1);
 
+        globalNodes.initial(model, opts);
         for (int idx = 0; idx < states.size(); idx++) {
             states[idx].initial(model, opts);
         }
@@ -52,10 +55,14 @@ class GreedyGraphBuilder {
         pOpts = NULL;
     }
 
+  public:
+    inline void encode(Graph* pcg, Instance& inst) {
+        globalNodes.forward(pcg, inst, pOpts);
+    }
 
   public:
     // some nodes may behave different during training and decode, for example, dropout
-    inline void decode(Graph* pcg, GlobalNodes* encoder, Instance &inst, bool nerOnly, const vector<CAction> *goldAC = NULL) {
+    inline void decode(Graph* pcg, Instance &inst, bool nerOnly, const vector<CAction> *goldAC = NULL) {
         //first step, clear node values
         clearVec(outputs);
 
@@ -78,23 +85,25 @@ class GreedyGraphBuilder {
         step = 0;
         while (true) {
             //prepare for the next
-            pGenerator->prepare(pOpts, pModel, encoder);
+            pGenerator->prepare(pOpts, pModel, &globalNodes);
 
             answer.clear();
             per_step_output.clear();
             correct_action_scored = false;
             if (pcg->train) answer = (*goldAC)[step];
-            pGenerator->getCandidateActions(actions, pOpts, pModel, pcg->train);
+            pGenerator->getCandidateActions(actions, pOpts);
             if (pcg->train && nerOnly && pGenerator->allow_rel()) {
                 actions.clear();
                 actions.push_back(answer);
             }
-            pGenerator->computeNextScore(pcg, actions, false);
+            pGenerator->computeNextScore(pcg, actions);
             pcg->compute(); //must compute here, or we can not obtain the scores
             beam.clear();
             scored_action.item = pGenerator;
+            output.curState = pGenerator;
             for (int idy = 0; idy < actions.size(); ++idy) {
                 scored_action.ac.set(actions[idy]); //TODO:
+                output.ac.set(actions[idy]); //TODO:
                 if (pGenerator->_bGold && actions[idy] == answer) {
                     scored_action.bGold = true;
                     correct_action_scored = true;

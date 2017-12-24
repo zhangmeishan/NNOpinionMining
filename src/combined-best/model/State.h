@@ -62,7 +62,7 @@ class CStateItem {
 
         for (int idx = 0; idx < max_token_size; idx++) {
             for (int idy = 0; idy < max_token_size; idy++) {
-                _labels[idx][idy] = -1;
+                _labels[idx][idy] = 0;
             }
         }
 

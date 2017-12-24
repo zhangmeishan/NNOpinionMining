@@ -39,7 +39,7 @@ int Extractor::createAlphabet(vector<Instance> &vecInsts) {
         }
 
         for (int idx = 0; idx < word_size; idx++) {
-            for (int idy = 0; idy < word_size; idy++) {
+            for (int idy = idx + 1; idy < word_size; idy++) {
                 int direction = instance.result.directions[idx][idy];
                 if (direction == 1) {
                     rel_stat[instance.result.relations[idx][idy]]++;

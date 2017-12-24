@@ -23,7 +23,6 @@ struct AtomFeatures {
     //all
     short word_size;
     bool bRel;
-    bool bEnd;
 
   public:
     //all
@@ -47,7 +46,6 @@ struct AtomFeatures {
 
         word_size = -1;
         bRel = false;
-        bEnd = false;
 
         p_word_left_lstm = NULL;
         p_word_right_lstm = NULL;

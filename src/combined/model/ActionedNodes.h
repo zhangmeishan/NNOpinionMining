@@ -26,8 +26,6 @@ struct ActionedNodes {
     vector<ActionNode> current_action_ner_input;
     vector<ActionNode> current_action_rel_input;
 
-    vector<PAddNode> scores;
-    LogSoftMax logsoft_scores;
     vector<PAddNode> outputs;
 
     BucketNode bucket_word;
@@ -58,11 +56,7 @@ struct ActionedNodes {
 
         current_action_ner_input.resize(hyparams.action_num);
         current_action_rel_input.resize(hyparams.action_num);
-
-        scores.resize(hyparams.action_num);
-        logsoft_scores.init(hyparams.action_num);
         outputs.resize(hyparams.action_num);
-
 
         //neural features
         for (int idx = 0; idx < hyparams.action_num; idx++) {
@@ -72,7 +66,6 @@ struct ActionedNodes {
             current_action_rel_input[idx].setParam(&(params.scored_action_rel_table));
             current_action_rel_input[idx].init(1, -1);
 
-            scores[idx].init(1, -1);
             outputs[idx].init(1, -1);
         }
 
@@ -83,20 +76,6 @@ struct ActionedNodes {
 
   public:
     inline void forward(Graph *cg, const vector<CAction> &actions, const AtomFeatures &atomFeat, PNode prevStateNode) {
-        bucket_score.forward(cg, 0);
-        PNode pseudo_score = &(bucket_score);
-        if (atomFeat.bEnd) {
-            if (actions.size() != 1 || !actions[0].isNone()) {
-                std::cout << "strange" << std::endl;
-            }
-            //std::cout << "idle" << std::endl;
-            if (prevStateNode != NULL) {
-                outputs[0].forward(cg, prevStateNode);
-            } else {
-                outputs[0].forward(cg, pseudo_score);
-            }
-            return;
-        }
         vector<PNode> sumNodes;
         CAction ac;
         int ac_num;
@@ -105,8 +84,9 @@ struct ActionedNodes {
         ac_num = actions.size();
 
         bucket_word.forward(cg, 0);
+        bucket_score.forward(cg, 0);
         PNode pseudo_word = &(bucket_word);
-
+        PNode pseudo_score = &(bucket_score);
 
         if (!atomFeat.bRel) {
             states.clear();
@@ -240,24 +220,17 @@ struct ActionedNodes {
                 current_action_rel_input[idx].forward(cg, action_name, &rel_state_represent);
                 sumNodes.push_back(&current_action_rel_input[idx]);
             } else {
-                //current_action_rel_input[idx].forward(cg, action_name, pseudo_state);
                 sumNodes.push_back(pseudo_score);
             }
 
-            scores[idx].forward(cg, sumNodes);
+
+            if (prevStateNode != NULL) {
+                sumNodes.push_back(prevStateNode);
+            }
+
+            outputs[idx].forward(cg, sumNodes);
         }
 
-        logsoft_scores.forward(cg, getPNodes(scores, ac_num));
-
-        if (prevStateNode != NULL) {
-            for (int idx = 0; idx < ac_num; idx++) {
-                outputs[idx].forward(cg, &(logsoft_scores._outputs[idx]), prevStateNode);
-            }
-        } else {
-            for (int idx = 0; idx < ac_num; idx++) {
-                outputs[idx].forward(cg, &(logsoft_scores._outputs[idx]));
-            }
-        }
     }
 };
 

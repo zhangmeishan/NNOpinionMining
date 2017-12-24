@@ -3,6 +3,7 @@
 
 #include "N3LDG.h"
 #include "Metric.h"
+#include "NewMetric.h"
 #include "Result.h"
 
 class Instance {
@@ -158,7 +159,7 @@ class Instance {
 
     }
 
-    void evaluatePropNER(CResult &other, unordered_map<string, Metric>& nersEval) {
+    void evaluatePropNER(CResult &other, unordered_map<string, NewMetric>& nersEval) {
         unordered_map<string, unordered_set<string> > gold_entities, pred_entities;
         result.extractNERs(gold_entities);
         other.extractNERs(pred_entities);
@@ -169,28 +170,24 @@ class Instance {
 
         for (map_iter = gold_entities.begin(); map_iter != gold_entities.end(); map_iter++) {
             if (nersEval.find(map_iter->first) == nersEval.end()) {
-                nersEval[map_iter->first] = Metric();
+                nersEval[map_iter->first] = NewMetric();
             }
-
-            for (iter1 = map_iter->second.begin(); iter1 != map_iter->second.end(); iter1++) {
-                Span sp1(*iter1);
-                nersEval[map_iter->first].overall_label_count += sp1.length();
-            }
-
+            nersEval[map_iter->first].overall_label_count += map_iter->second.size();
         }
 
         for (map_iter = pred_entities.begin(); map_iter != pred_entities.end(); map_iter++) {
             if (nersEval.find(map_iter->first) == nersEval.end()) {
-                nersEval[map_iter->first] = Metric();
+                nersEval[map_iter->first] = NewMetric();
             }
+
+            nersEval[map_iter->first].predicated_label_count += map_iter->second.size();
 
             if (gold_entities.find(map_iter->first) != gold_entities.end()) {
                 for (iter1 = map_iter->second.begin(); iter1 != map_iter->second.end(); iter1++) {
                     Span sp1(*iter1);
-                    nersEval[map_iter->first].predicated_label_count += sp1.length();
                     for (iter2 = gold_entities[map_iter->first].begin(); iter2 != gold_entities[map_iter->first].end(); iter2++) {
                         Span sp2(*iter2);
-                        nersEval[map_iter->first].correct_label_count += sp1.matchNum(sp2);
+                        nersEval[map_iter->first].correct_label_count += sp1.matchProp(sp2);
                     }
                 }
             }
@@ -234,6 +231,80 @@ class Instance {
                     }
                 }
             }
+        }
+    }
+
+    //reward computation
+    void evaluatePropNER(CResult &other, NewMetric& nersEval) {
+        unordered_map<string, unordered_set<string> > gold_entities, pred_entities;
+        result.extractNERs(gold_entities);
+        other.extractNERs(pred_entities);
+
+        unordered_map<string, unordered_set<string> >::iterator map_iter;
+        unordered_set<string>::iterator iter1;
+        unordered_set<string>::iterator iter2;
+
+        for (map_iter = gold_entities.begin(); map_iter != gold_entities.end(); map_iter++) {
+            nersEval.overall_label_count += map_iter->second.size();
+        }
+
+        for (map_iter = pred_entities.begin(); map_iter != pred_entities.end(); map_iter++) {
+            nersEval.predicated_label_count += map_iter->second.size();
+
+
+            if (gold_entities.find(map_iter->first) != gold_entities.end()) {
+                for (iter1 = map_iter->second.begin(); iter1 != map_iter->second.end(); iter1++) {
+                    Span sp1(*iter1);
+                    dtype max_score = 0;
+                    for (iter2 = gold_entities[map_iter->first].begin(); iter2 != gold_entities[map_iter->first].end(); iter2++) {
+                        Span sp2(*iter2);
+                        dtype cur_score = sp1.matchProp(sp2);
+                        if (cur_score > max_score) max_score = cur_score;
+                    }
+                    if (max_score > 1 + 1e-8) {
+                        std::cout << "error prop evaluation" << std::endl;
+                    }
+                    nersEval.correct_label_count += max_score;
+                }
+            }
+
+
+        }
+    }
+
+    //reward computation
+    void evaluatePropREL(CResult &other, NewMetric& relsEval) {
+        unordered_set<string>::iterator iter;
+
+        unordered_map<string, unordered_set<string> > gold_entities, pred_entities;
+        result.extractRelations(gold_entities);
+        other.extractRelations(pred_entities);
+
+        unordered_map<string, unordered_set<string> >::iterator map_iter;
+        unordered_set<string>::iterator iter1;
+        unordered_set<string>::iterator iter2;
+
+        for (map_iter = gold_entities.begin(); map_iter != gold_entities.end(); map_iter++) {
+            relsEval.overall_label_count += map_iter->second.size();
+        }
+
+        for (map_iter = pred_entities.begin(); map_iter != pred_entities.end(); map_iter++) {
+            relsEval.predicated_label_count += map_iter->second.size();
+
+            if (gold_entities.find(map_iter->first) != gold_entities.end()) {
+                for (iter1 = map_iter->second.begin(); iter1 != map_iter->second.end(); iter1++) {
+                    SpanPair sp1(*iter1);
+                    dtype max_score = 0;
+                    for (iter2 = gold_entities[map_iter->first].begin(); iter2 != gold_entities[map_iter->first].end(); iter2++) {
+                        SpanPair sp2(*iter2);
+                        dtype cur_score = sp1.matchProp(sp2);
+                        if (cur_score > max_score) max_score = cur_score;
+                    }
+                    relsEval.correct_label_count += max_score;
+                }
+            }
+
+
         }
     }
 

@@ -65,7 +65,7 @@ class Options {
     int lstm_layer;
 
     int reach_drop;
-
+    dtype anneal;
 
     Options() {
         wordCutOff = 0;
@@ -123,6 +123,7 @@ class Options {
         lstm_layer = 2;
 
         reach_drop = 10;
+        anneal = 1.0;
     }
 
     virtual ~Options() {
@@ -228,6 +229,9 @@ class Options {
                 lstm_layer = atoi(pr.second.c_str());
             if (pr.first == "reach_drop")
                 reach_drop = atoi(pr.second.c_str());
+            if (pr.first == "anneal")
+                anneal = atof(pr.second.c_str());
+
 
         }
     }
@@ -284,6 +288,7 @@ class Options {
         std::cout << "unk_strategy = " << unk_strategy << std::endl;
         std::cout << "lstm_layer = " << lstm_layer << std::endl;
         std::cout << "reach_drop = " << reach_drop << std::endl;
+        std::cout << "anneal = " << anneal << std::endl;
     }
 
     void load(const std::string &infile) {

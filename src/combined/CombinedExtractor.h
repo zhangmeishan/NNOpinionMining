@@ -20,8 +20,8 @@ class Extractor {
     Options m_options;
     Pipe m_pipe;
 
-    vector<string> nerlabels;
-    vector<string> relations;
+    unordered_set<string> nerlabels;
+    unordered_set<string> relations;
 
   public:
     int createAlphabet( vector<Instance>& vecInsts);

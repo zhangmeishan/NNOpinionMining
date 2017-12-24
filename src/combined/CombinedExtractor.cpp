@@ -7,13 +7,6 @@
 
 Extractor::Extractor() {
     srand(0);
-	nerlabels.clear();
-	nerlabels.push_back("AGENT");
-	nerlabels.push_back("TARGET");
-	nerlabels.push_back("DSE");
-	relations.clear();
-	relations.push_back("AGENT-DSE");
-	relations.push_back("TARGET-DSE");
 }
 
 
@@ -27,6 +20,8 @@ int Extractor::createAlphabet(vector<Instance> &vecInsts) {
 
     unordered_map<string, int> word_stat;
 
+    nerlabels.clear();
+    relations.clear();
     assert(totalInstance > 0);
     for (int numInstance = 0; numInstance < vecInsts.size(); numInstance++) {
         const Instance &instance = vecInsts[numInstance];
@@ -36,6 +31,22 @@ int Extractor::createAlphabet(vector<Instance> &vecInsts) {
             m_driver._hyperparams.word_stat[curWord]++;
             word_stat[curWord]++;
 
+            string curner = instance.result.relations[idx][idx];
+            if (is_start_label(curner)) {
+                nerlabels.insert(cleanLabel(curner));
+            }
+        }
+
+        for (int idx = 0; idx < word_size; idx++) {
+            for (int idy = idx + 1; idy < word_size; idy++) {
+                int direction = instance.result.directions[idx][idy];
+                if (direction == 1) {
+                    relations.insert(instance.result.relations[idx][idy]);
+                }
+                if (direction == 2) {
+                    relations.insert(instance.result.relations[idx][idy]);
+                }
+            }
         }
     }
 
@@ -46,31 +57,36 @@ int Extractor::createAlphabet(vector<Instance> &vecInsts) {
     // TODO:
     m_driver._hyperparams.ner_labels.clear();
     m_driver._hyperparams.ner_labels.from_string("o");
-	for (int idm = 0; idm < nerlabels.size(); idm++) {
-        m_driver._hyperparams.ner_labels.from_string("b-" + nerlabels[idm]);
-        m_driver._hyperparams.ner_labels.from_string("m-" + nerlabels[idm]);
-        m_driver._hyperparams.ner_labels.from_string("e-" + nerlabels[idm]);
-        m_driver._hyperparams.ner_labels.from_string("s-" + nerlabels[idm]);
+    unordered_map<string, int>::const_iterator iter;
+	unordered_set<string>::const_iterator siter;
+    for (siter = nerlabels.begin(); siter != nerlabels.end(); siter++) {
+        m_driver._hyperparams.ner_labels.from_string("b-" + *siter);
+        m_driver._hyperparams.ner_labels.from_string("m-" + *siter);
+        m_driver._hyperparams.ner_labels.from_string("e-" + *siter);
+        m_driver._hyperparams.ner_labels.from_string("s-" + *siter);
     }
     m_driver._hyperparams.ner_labels.set_fixed_flag(true);
     m_driver._hyperparams.ner_noprefix_num = nerlabels.size();
 
     m_driver._hyperparams.rel_labels.clear();
     m_driver._hyperparams.rel_labels.from_string("noRel");
-	for (int idm = 0; idm < relations.size(); idm++) {
-        m_driver._hyperparams.rel_labels.from_string(relations[idm]);
+    for (siter = relations.begin(); siter != relations.end(); siter++) {
+        m_driver._hyperparams.rel_labels.from_string(*siter);
     }
+
     m_driver._hyperparams.rel_labels.set_fixed_flag(true);
 
 	int ner_count = m_driver._hyperparams.ner_labels.size();
     int rel_count = m_driver._hyperparams.rel_labels.size();
 
-    m_driver._hyperparams.action_num = ner_count > 2 * rel_count ? ner_count : 2 * rel_count;
+	m_driver._hyperparams.action_num = ner_count > 2 * rel_count ? ner_count : 2 * rel_count - 1;
 
     unordered_map<string, int> action_ner_stat, action_rel_stat;
     vector<CStateItem> state(m_driver._hyperparams.maxlength + 1);
     CResult output;
     CAction answer;
+	vector<CAction> acs;
+	bool bFindGold;
     Metric ner, rel, rel_punc;
     ner.reset();
     rel.reset();
@@ -91,9 +107,33 @@ int Extractor::createAlphabet(vector<Instance> &vecInsts) {
 			else if (answer.isREL()) {
 				action_rel_stat[answer.str(&(m_driver._hyperparams))]++;
 			}
+
+			state[stepNum].getCandidateActions(acs, &m_driver._hyperparams);
+			bFindGold = false;
+			for (int idz = 0; idz < acs.size(); idz++) {
+				if (acs[idz] == answer) {
+					bFindGold = true;
+				}
+				if (acs[idz].isNER()) {
+					action_ner_stat[acs[idz].str(&(m_driver._hyperparams))]++;
+				}
+				else if (acs[idz].isREL()) {
+					action_rel_stat[acs[idz].str(&(m_driver._hyperparams))]++;
+				}
+			}
+			if (!bFindGold) {
+				state[stepNum].getCandidateActions(acs, &m_driver._hyperparams);
+				std::cout << "gold action has been filtered" << std::endl;
+				exit(0);
+			}
+
+
             state[stepNum].move(&(state[stepNum + 1]), answer);
             stepNum++;
         }
+
+		answer.set(CAction::REL, 0);
+		action_rel_stat[answer.str(&(m_driver._hyperparams))]++;
         //
         state[stepNum].getResults(output, m_driver._hyperparams);
         instance.evaluate(output, ner, rel); //TODO: 不唯一? //FIXME:
@@ -142,7 +182,7 @@ void Extractor::getGoldActions(vector<Instance>& vecInsts, vector<vector<CAction
         while (!state[stepNum]._bEnd) {
             state[stepNum].getGoldAction(m_driver._hyperparams, instance.result, answer);
             //std::cout << answer.str(&(m_driver._hyperparams)) << " ";
-            state[stepNum].getCandidateActions(acs, &m_driver._hyperparams, &m_driver._modelparams, true);
+            state[stepNum].getCandidateActions(acs, &m_driver._hyperparams);
 
             bFindGold = false;
             for (int idz = 0; idz < acs.size(); idz++) {
@@ -152,7 +192,7 @@ void Extractor::getGoldActions(vector<Instance>& vecInsts, vector<vector<CAction
                 }
             }
             if (!bFindGold) {
-                state[stepNum].getCandidateActions(acs, &m_driver._hyperparams, &m_driver._modelparams, true);
+                state[stepNum].getCandidateActions(acs, &m_driver._hyperparams);
                 std::cout << "gold action has been filtered" << std::endl;
                 exit(0);
             }
@@ -232,19 +272,21 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
     Metric dev_ner, dev_rel;
     Metric test_ner, test_rel;
 
-    unordered_map<string, Metric> dev_ners, dev_rels, dev_prop_ners;
-    unordered_map<string, Metric> test_ners, test_rels, test_prop_ners;
-    //unordered_set<string>::iterator iter_set;
-	for (int idm = 0; idm < nerlabels.size(); idm++) {
-        dev_ners[nerlabels[idm]] = Metric();
-        test_ners[nerlabels[idm]] = Metric();
-        dev_prop_ners[nerlabels[idm]] = Metric();
-        test_prop_ners[nerlabels[idm]] = Metric();
+    unordered_map<string, Metric> dev_ners, dev_rels;
+    unordered_map<string, Metric> test_ners, test_rels;
+	unordered_map<string, NewMetric> dev_prop_ners, test_prop_ners;
+    unordered_set<string>::iterator iter_set;
+    for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+
+        dev_ners[*iter_set] = Metric();
+        test_ners[*iter_set] = Metric();
+        dev_prop_ners[*iter_set] = NewMetric();
+        test_prop_ners[*iter_set] = NewMetric();
     }
 
-	for (int idm = 0; idm < relations.size(); idm++) {
-        dev_rels[relations[idm]] = Metric();
-        test_rels[relations[idm]] = Metric();
+    for (iter_set = relations.begin(); iter_set != relations.end(); iter_set++) {
+        dev_rels[*iter_set] = Metric();
+        test_rels[*iter_set] = Metric();
     }
 
     int maxIter = m_options.maxIter;
@@ -265,18 +307,14 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
     decays[50] = true;
     decays[75] = true; */
     int maxNERIter = m_options.maxNERIter;
-	int startBeam = m_options.startBeam > 0 ? m_options.startBeam : 1;
-    m_driver.setTao(1.0);
+    int startBeam = m_options.startBeam;
     m_driver.setClip(m_options.clip);
     for (int iter = 0; iter < maxIter; ++iter) {
-        //if (decays[iter]) {
 		dtype adaAlpha = m_options.adaAlpha / (1 + m_options.decay * iter);
         m_driver.setUpdateParameters(m_options.regParameter, adaAlpha, m_options.adaEps);
-		dtype tao = 1.0 - 1.0 * iter / startBeam;
-		if (iter >= startBeam) tao = 0;
-		m_driver.setTao(tao);					
+
 		if(m_options.reach_drop > 0)m_driver.setDropFactor(iter * 1.0 / m_options.reach_drop);
-		std::cout << "\nadaAlpha = " << m_driver._ada._alpha << ", tao = " << m_driver._tao << ", drop = " << m_driver._cg.drop_factor * m_driver._hyperparams.dropProb << std::endl;
+		std::cout << "\nadaAlpha = " << m_driver ._ada._alpha << ", drop = " << m_driver._cg.drop_factor * m_driver._hyperparams.dropProb << std::endl;
         std::cout << "##### Iteration " << iter << std::endl;
         srand(iter);
         bool bEvaluate = false;
@@ -354,13 +392,13 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
             dev_ner.reset();
             dev_rel.reset();
 
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-                dev_ners[nerlabels[idm]].reset();
-                dev_prop_ners[nerlabels[idm]].reset();
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                dev_ners[*iter_set].reset();
+                dev_prop_ners[*iter_set].reset();
             }
 
-			for (int idm = 0; idm < relations.size(); idm++) {
-                dev_rels[relations[idm]].reset();
+            for (iter_set = relations.begin(); iter_set != relations.end(); iter_set++) {
+                dev_rels[*iter_set].reset();
             }
 
             predict(devInsts, decodeInstResults);
@@ -377,19 +415,19 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
             dev_ner.print();
             dev_rel.print();
 
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-                std::cout << nerlabels[idm] << " ";
-                dev_ners[nerlabels[idm]].print();
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                std::cout << *iter_set << " ";
+                dev_ners[*iter_set].print();
             }
 
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-                std::cout << nerlabels[idm] << " PROP ";
-                dev_prop_ners[nerlabels[idm]].print();
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                std::cout << *iter_set << " PROP ";
+                dev_prop_ners[*iter_set].print();
             }
 
-			for (int idm = 0; idm < relations.size(); idm++) {
-                std::cout << relations[idm] << " ";
-                dev_rels[relations[idm]].print();
+            for (iter_set = relations.begin(); iter_set != relations.end(); iter_set++) {
+                std::cout << *iter_set << " ";
+                dev_rels[*iter_set].print();
             }
 
             if (!m_options.outBest.empty() && dev_rel.getAccuracy() > bestFmeasure) {
@@ -406,13 +444,13 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
             test_ner.reset();
             test_rel.reset();
 
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-                test_ners[nerlabels[idm]].reset();
-                test_prop_ners[nerlabels[idm]].reset();
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                test_ners[*iter_set].reset();
+                test_prop_ners[*iter_set].reset();
             }
 
-			for (int idm = 0; idm < relations.size(); idm++) {
-                test_rels[relations[idm]].reset();
+            for (iter_set = relations.begin(); iter_set != relations.end(); iter_set++) {
+                test_rels[*iter_set].reset();
             }
 
             predict(testInsts, decodeInstResults);
@@ -428,19 +466,19 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
             test_ner.print();
             test_rel.print();
 
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-				std::cout << nerlabels[idm] << " ";
-                test_ners[nerlabels[idm]].print();
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                std::cout << *iter_set << " ";
+                test_ners[*iter_set].print();
             }
 
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-				std::cout << nerlabels[idm] << " ";
-                test_prop_ners[nerlabels[idm]].print();
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                std::cout << *iter_set << " PROP ";
+                test_prop_ners[*iter_set].print();
             }
 
-			for (int idm = 0; idm < relations.size(); idm++) {
-				std::cout << relations[idm] << " ";
-                test_rels[relations[idm]].print();
+            for (iter_set = relations.begin(); iter_set != relations.end(); iter_set++) {
+                std::cout << *iter_set << " ";
+                test_rels[*iter_set].print();
             }
 
 
@@ -456,14 +494,14 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
                 decodeInstResults.clear();
             test_ner.reset();
             test_rel.reset();
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-				test_ners[nerlabels[idm]].reset();
-				test_prop_ners[nerlabels[idm]].reset();
-			}
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                test_ners[*iter_set].reset();
+                test_prop_ners[*iter_set].reset();
+            }
 
-			for (int idm = 0; idm < relations.size(); idm++) {
-				test_rels[relations[idm]].reset();
-			}
+            for (iter_set = relations.begin(); iter_set != relations.end(); iter_set++) {
+                test_rels[*iter_set].reset();
+            }
 
             predict(otherInsts[idx], decodeInstResults);
             for (int idy = 0; idy < otherInsts[idx].size(); idy++) {
@@ -477,20 +515,21 @@ void Extractor::train(const string &trainFile, const string &devFile, const stri
             std::cout << "test:" << std::endl;
             test_ner.print();
             test_rel.print();
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-				std::cout << nerlabels[idm] << " ";
-				test_ners[nerlabels[idm]].print();
-			}
 
-			for (int idm = 0; idm < nerlabels.size(); idm++) {
-				std::cout << nerlabels[idm] << " ";
-				test_prop_ners[nerlabels[idm]].print();
-			}
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                std::cout << *iter_set << " ";
+                test_ners[*iter_set].print();
+            }
 
-			for (int idm = 0; idm < relations.size(); idm++) {
-				std::cout << relations[idm] << " ";
-				test_rels[relations[idm]].print();
-			}
+            for (iter_set = nerlabels.begin(); iter_set != nerlabels.end(); iter_set++) {
+                std::cout << *iter_set << " PROP ";
+                test_prop_ners[*iter_set].print();
+            }
+
+            for (iter_set = relations.begin(); iter_set != relations.end(); iter_set++) {
+                std::cout << *iter_set << " ";
+                test_rels[*iter_set].print();
+            }
 
             if (!m_options.outBest.empty() && bCurIterBetter) {
                 m_pipe.outputAllInstances(m_options.testFiles[idx] + m_options.outBest, decodeInstResults);

@@ -71,6 +71,21 @@ struct Span {
         return correct;
     }
 
+    inline dtype matchProp(const Span &other) const {
+        if (end < other.start || start > other.end) {
+            return 0;
+        }
+
+        int correct = 0;
+        for (int idx = other.start; idx <= other.end; idx++) {
+            if (idx >= start && idx <= end) {
+                correct++;
+            }
+        }
+
+        return correct * 2.0 / (length() + other.length());
+    }
+
   public:
     bool operator==(const Span &a1) const {
         return (start == a1.start) && (end == a1.end);
@@ -116,6 +131,10 @@ struct SpanPair {
             return true;
         }
         return false;
+    }
+
+    inline dtype matchProp(const SpanPair &other) const {
+        return s1.matchProp(other.s1) * s2.matchProp(other.s2);
     }
 
 
