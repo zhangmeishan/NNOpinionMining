@@ -1,3 +1,3 @@
 cmake .. -DEIGEN3_DIR=/d/eigen/ -DN3L_DIR=/d/N3LDG
 
--l -train train_0.txt -dev dev_0.txt -test test_0.txt -option D:\experiments\IJCAI2017\OpinionMining\experiment-debug\option.debug    
+-l -train train_0.txt -dev dev_0.txt -test test_0.txt -option option.debug    
